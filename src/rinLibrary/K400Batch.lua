@@ -377,7 +377,9 @@ private.registerDeviceInitialiser(function()
     private.exposeFunction('selectRecipe', batching, function(prompt, default)
         local names = {}
         for _, v in pairs(recipes) do
-            table.insert(names, v.recipe)
+            if type(v) == 'table' and v.recipe then
+                table.insert(names, v.recipe)
+            end
         end
         table.sort(names)
 
