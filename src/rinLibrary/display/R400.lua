@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 -- R400 LCD Services
 -- Functions to add the R400 LCD to the display fields
--- @module rinLibrary.display.R400
+-- @module rinLibrary.Device.LCD
 -- @author Merrick Heley
 -- @copyright 2015 Rinstrum Pty Ltd
 -------------------------------------------------------------------------------
@@ -28,6 +28,76 @@ _M.REG_DISP_BOTTOM_UNITS    = 0x00B5
 _M.REG_DISP_AUTO_TOP_ANNUN  = 0x00B6    -- Register
 _M.REG_DISP_AUTO_TOP_LEFT   = 0x00B7    -- Register
 _M.REG_DISP_AUTO_BOTTOM_LEFT= 0x00B8    -- Register
+
+--- LCD Annunciators
+-- These are the definitions of all the annunciators top, bottom, and remote.
+-- Some displays may not support all annunciators. If an annunciator is not
+-- supported, no action will occur.
+--@table Annunciators
+-- @field all All annunciators top and bottom
+-- @field balance (top)
+-- @field bal_sega (top)
+-- @field bal_segb (top)
+-- @field bal_segc (top)
+-- @field bal_segd (top)
+-- @field bal_sege (top)
+-- @field bal_segf (top)
+-- @field bal_segg (top)
+-- @field bat_full Top battery charge bar (bottom)
+-- @field bat_hi Second from top battery charge bar (bottom)
+-- @field bat_midh Middle battery charge bar (bottom)
+-- @field bat_midl Second from bottom battery charge bar (bottom)
+-- @field bat_lo Bottom battery charge bar (bottom)
+-- @field battery Battery icon (bottom)
+-- @field clock (bottom)
+-- @field coz (top, remote)
+-- @field hold (top)
+-- @field motion (top, remote)
+-- @field net (top, remote)
+-- @field range_segadg (top)
+-- @field range_segc (top)
+-- @field range_sege (top)
+-- @field range (top)
+-- @field sigma (top)
+-- @field wait135 Diagonal wait annunciator (bottom)
+-- @field wait45 Diagonal wait annunciator (bottom)
+-- @field wait90 Horizontal wait annunciator (bottom)
+-- @field waitall All four wait annunciators (bottom)
+-- @field wait Vertical wait annunciator (bottom)
+-- @field zero (top)
+-- @field redlight Turn on the red traffic light (remote)
+-- @field greenlight Turn on the green traffic light (remote)
+
+--- Main Units
+-- Some displays may not support all annunciators. If an annunciator is not
+-- supported, no action will occur.
+--@table Units
+-- @field none No annunciator selected
+-- @field kg Kilogram annunciator
+-- @field lb Pound  annunciator
+-- @field t Ton/Tonne  annunciator
+-- @field g Gramme  annunciator
+-- @field oz Ounce annunciator
+-- @field n
+-- @field arrow_l
+-- @field p
+-- @field l
+-- @field arrow_h
+
+--- Additional modifiers on bottom display
+-- Some displays may not support all annunciators. If an annunciator is not
+-- supported, no action will occur.
+--@table Other
+-- @field none No annuciator selected
+-- @field hour Hour annunciator
+-- @field minute Minute annunciator
+-- @field percent Percent annunciator (includes slash)
+-- @field per_h Per hour annunciator (slash + hour)
+-- @field per_m Per meter annunciator (slash + minute)
+-- @field per_s Per second annuicator (slash + second)
+-- @field second Second annunicator
+-- @field slash Slash line
+-- @field total Total annunciator
 
 local unitAnnunciators = {
     none      = 0,
@@ -174,13 +244,13 @@ local function rotWaitLocal(private, dir)
 
     botAnnunState = bit32.band(botAnnunState, bit32.bnot(WAITALL))
     botAnnunState = bit32.bor(botAnnunState, WAIT_SEGS[waitPos])
-    
+
     private.writeRegHexAsync(_M.REG_DISP_BOTTOM_ANNUN, botAnnunState)
 end
 
 -------------------------------------------------------------------------------
 -- Add the R400 to the displayTable. This will add 4 display fields
--- (prefix followed by topLeft, topRight, bottomLeft, and bottomRight) to the 
+-- (prefix followed by topLeft, topRight, bottomLeft, and bottomRight) to the
 -- table of writable displays.
 -- @param private Functions from rinLibrary
 -- @param displayTable displayTable used by rinLibrary
@@ -188,7 +258,7 @@ end
 -- @return Updated displayTable
 -- @local
 function _M.add(private, displayTable, prefix)
-  
+
   displayTable[prefix .. "topleft"] = {
     top = true, left = true, localDisplay = true,
     length = 6,
@@ -204,23 +274,19 @@ function _M.add(private, displayTable, prefix)
     saveAuto = 0,
     write = function (s, sync) return dispHelp.writeRegHex(private, sync, _M.REG_DISP_TOP_LEFT, s) end,
     writeUnits = function (units1)
-    
                 local me = displayTable[prefix .. "topleft"]
-                
-                local u = naming.convertNameToValue(units1, unitAnnunciators, 0x00)
-                local o = naming.convertNameToValue(nil, otherAunnuncitors, 0x00)
-                local v = bit32.bor(bit32.lshift(o, 8), u)
-                
-                if me.units1 ~= units1 then
+                local v = naming.convertNameToValue(units1, unitAnnunciators, 0)
+
+                if me.units1 ~= v then
                   private.writeReg(me.regUnits, v)
-                  me.units1 = units1
+                  me.units1 = v
                 end
-                
+
                 return units1, nil
               end,
       setAnnun = function (...) return setAnnunLocal(private, ...) end,
       clearAnnun = function (...) return clearAnnunLocal(private, ...) end,
-      rotWait = function (...) return rotWaitLocal(private, ...) end, 
+      rotWait = function (...) return rotWaitLocal(private, ...) end,
   }
 
   displayTable[prefix .. "topright"] = {
@@ -235,7 +301,7 @@ function _M.add(private, displayTable, prefix)
       setAnnun = function (...) return setAnnunLocal(private, ...) end,
       clearAnnun = function (...) return clearAnnunLocal(private, ...) end
   }
-  
+
   displayTable[prefix .. "bottomleft"] = {
       bottom = true,  left = true, localDisplay = true,
       length = 9,
@@ -252,26 +318,27 @@ function _M.add(private, displayTable, prefix)
       saveAuto = 0,
       write = function (s, sync) return dispHelp.writeRegHex(private, sync, _M.REG_DISP_BOTTOM_LEFT, s) end,
       writeUnits = function (units1, units2)
-
             local me = displayTable[prefix .. "bottomleft"]
-            
-            local u = naming.convertNameToValue(units1, unitAnnunciators, 0x00)
-            local o = naming.convertNameToValue(units2, otherAunnuncitors, 0x00)
-            local v = bit32.bor(bit32.lshift(o, 8), u)
-            
-            if me.units1 ~= units1 or me.units2 ~= units2 then
-              private.writeReg(me.regUnits, v)
-              me.units1 = units1
-              me.units2 = units2
+
+            local u, o = naming.convertNameToValue(units1, unitAnnunciators, 0), 0
+            for _, a in pairs(type(units2) == 'table' and units2 or { units2 }) do
+                o = bit32.bor(o, naming.convertNameToValue(a, otherAunnuncitors, 0))
             end
-            
+            local v = bit32.bor(bit32.lshift(o, 8), u)
+
+            if me.units1 ~= u or me.units2 ~= o then
+              private.writeReg(me.regUnits, v)
+              me.units1 = u
+              me.units2 = o
+            end
+
             return units1, units2
           end,
       setAnnun = function (...) return setAnnunLocal(private, ...) end,
       clearAnnun = function (...) return clearAnnunLocal(private, ...) end,
-      rotWait = function (...) return rotWaitLocal(private, ...) end, 
+      rotWait = function (...) return rotWaitLocal(private, ...) end,
   }
-  
+
   displayTable[prefix .. "bottomright"] = {
       bottom = true,  right = true, localDisplay = true,
       length = 8,
@@ -283,11 +350,13 @@ function _M.add(private, displayTable, prefix)
       write = function (s, sync) return dispHelp.writeRegHex(private, sync, _M.REG_DISP_BOTTOM_RIGHT, s) end,
       setAnnun = function (...) return setAnnunLocal(private, ...) end,
       clearAnnun = function (...) return clearAnnunLocal(private, ...) end,
-      rotWait = function (...) return rotWaitLocal(private, ...) end, 
+      rotWait = function (...) return rotWaitLocal(private, ...) end,
   }
   
+  displayTable[prefix .. "defaultwriter"] = displayTable[prefix .. "bottomleft"] 
+
   return displayTable
 
 end
-    
+
 return _M

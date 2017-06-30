@@ -25,20 +25,11 @@ describe("RTC #rtc", function ()
     local function makeModule()
         local m, p, d = {}, {}, {}
         require("rinLibrary.utilities")(m, p, d)
-        require("rinLibrary.K400RTC")(m, p, d)
+        require("rinLibrary.GenericRTC")(m, p, d)
         m.flushed = 0
         m.flush = function() m.flushed = m.flushed + 1 end
         return m, p, d
     end
-
-    describe("deprecated registers", function()
-        local _, _, d = makeModule()
-            for k, v in pairs(dregs) do
-            it("test "..k, function()
-                assert.equal(v, d["REG_" .. string.upper(k)])
-            end)
-        end
-    end)
 
     it("enumerations", function()
         local _, _, d = makeModule()
@@ -133,27 +124,28 @@ describe("RTC #rtc", function ()
         local m, _, d = makeModule()
         local yr, mo, da, ho, mi, se = 2022, 1, 2, 3, 4, 5
         local results = makeResults(yr, mo, da, ho, mi, se)
-
+  
+        date.setDateFormat('day', 'month', 'year', 4)
         z.checkWriteReg(m, results, m.RTCwrite, yr, mo, da, ho, mi, se)
         assert.is_equal(1, m.flushed)
         assert.is_same({ yr, mo, da, n=3 }, table.pack(m.RTCreadDate()))
         assert.is_same({ ho, mi, se, n=3 }, table.pack(m.RTCreadTime()))
+        assert.is_same({ "day", "month", "year", 4}, {date.getDateFormat()})
         assert.is_equal("02/01/2022 03:04:05", m.RTCtostring())
-        assert.is_same({ "day", "month", "year" }, {date.getDateFormat()})
 
-        date.setDateFormat('month', 'day', 'year')
+        date.setDateFormat('month', 'day', 'year', 4)
         assert.is_same({ yr, mo, da, n=3 }, table.pack(m.RTCreadDate()))
         assert.is_same({ ho, mi, se, n=3 }, table.pack(m.RTCreadTime()))
         assert.is_equal("01/02/2022 03:04:05", m.RTCtostring())
-        assert.is_same({ "month", "day", "year" }, {date.getDateFormat()})
+        assert.is_same({ "month", "day", "year", 4 }, {date.getDateFormat()})
 
-        date.setDateFormat('year', 'month', 'day')
+        date.setDateFormat('year', 'month', 'day', 4)
         assert.is_equal("2022/01/02 03:04:05", m.RTCtostring())
-        assert.is_same({ "year", "month", "day" }, {date.getDateFormat()})
+        assert.is_same({ "year", "month", "day", 4 }, {date.getDateFormat()})
 
-        date.setDateFormat('day', 'month', 'year')
+        date.setDateFormat('day', 'month', 'year', 4)
         assert.is_equal("02/01/2022 03:04:05", m.RTCtostring())
-        assert.is_same({ "day", "month", "year" }, {date.getDateFormat()})
+        assert.is_same({ "day", "month", "year", 4 }, {date.getDateFormat()})
     end)
 
     describe("time format #time12", function()

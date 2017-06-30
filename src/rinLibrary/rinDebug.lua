@@ -30,6 +30,14 @@ require "logging.console"
 require "logging.file"
 local logger = logging.console("%message\n")
 
+--- Debug levels
+-- @table dbgLevels
+-- @field debug Lowest level debug output. By default this will not be echoed.
+-- @field info Info level debug. This should be used by applications and for library setup.
+-- @field warn Warning level. Used to report unexpected unexpected but successful operation.
+-- @field error Error level. Used when an operation fails.
+-- @field fatal Fatal level. Used when an operation fails and crashes.
+
 local DEBUG = logging.DEBUG
 local INFO  = logging.INFO
 local WARN  = logging.WARN
@@ -44,6 +52,14 @@ local levelCodes, levelNames = {}, {
     fatal = FATAL
 }
 for k, v in pairs(levelNames) do levelCodes[v] = string.upper(k) end
+
+local levelLookup = {
+    DEBUG = 1,
+    INFO  = 2,
+    WARN  = 3,
+    ERROR = 4,
+    FATAL = 5,
+}
 
 local currentLevel = DEBUG
 local lastLevel = currentLevel
@@ -62,7 +78,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Set Debug level
--- @param level enumerated level constant or matching string.
+-- @tparam dbgLevels level Enumerated level constant or matching string.
 -- If no match level set to INFO
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
@@ -89,7 +105,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Set the kind of logger used to produce messages
--- @param config a configuration table
+-- @tab config A configuration table for the logger
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.setLogger({ logger = 'file', file = { filename = '/dev/null' } })
@@ -124,7 +140,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Configures the level for debugging
--- @param config is table of settings
+-- @tab config Table of settings for the debugger
 -- @usage
 -- dbg.configureDebug({level = 'DEBUG',timestamp = 'on', logger = 'console'})
 function _M.configureDebug(config)
@@ -135,7 +151,7 @@ end
 
 -------------------------------------------------------------------------------
 -- returns debug configuration table
--- @return config table eg{level = 'DEBUG',timestamp = 'on', logger = 'console'}
+-- @treturn tab Config table e.g. {level = 'DEBUG',timestamp = 'on', logger = 'console'}
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- local t = dbg.getDebugConfig()
@@ -225,7 +241,7 @@ end
 
 -----------------------------------------------------------------------------------
 -- Set a secondary debug capability
--- @param logfunction The function to call for extra logging
+-- @func logfunction The function to call for extra logging
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.setDebugCallback(function(s) print('see this twice: ', s) end)
@@ -236,12 +252,19 @@ end
 
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at current debug level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.print('hello', 'I want to tell you something at the current debug level')
 function _M.print(prompt, ...)
+
+    -- If the current logging level is greater than the level that we want to 
+    -- log at, we can safely exit.
+    local level = _M.tempLevel or currentLevel
+    if levelLookup[currentLevel] > levelLookup[level] then
+      return 
+    end
 
     local timestr = ''
     local s
@@ -250,7 +273,6 @@ function _M.print(prompt, ...)
         timestr = os.date("%Y-%m-%d %X ")
     end
 
-    local level = _M.tempLevel or currentLevel
     local header = string.format("%s %s: ", timestr, levelCodes[level])
     local margin = #header
 
@@ -264,8 +286,8 @@ function _M.print(prompt, ...)
     if arg.n == 0 then
         s = s .. varString(nil)
     else
-        for i,v in ipairs(arg) do
-            s = s .. varString(v,margin) .. ' '
+        for i = 1,arg.n do
+            s = s .. varString(arg[i],margin) .. ' '
         end
    end
 
@@ -278,8 +300,8 @@ end
 
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at DEBUG level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.debug('help', "we don't know what is going on", 'this might assist')
@@ -290,8 +312,8 @@ end
 
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at INFO level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.info('info', 'pi is', 3.14159265358979323846264338327950, 'roughly')
@@ -303,8 +325,8 @@ end
 
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at WARN level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.warn('warning', 'something went awry, i =', i)
@@ -315,8 +337,8 @@ function _M.warn(prompt, ...)
 end
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at ERROR level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.error('oops', 'something went awry, i =', i)
@@ -327,8 +349,8 @@ end
 
 -----------------------------------------------------------------------------------
 -- Prints variable contents to debugger at FATAL level with optional prompt
--- @param prompt is an optional prompt printed before the arguments
--- @param ... arguments to be printed
+-- @string prompt Optional prompt printed before the arguments
+-- @string ... Arguments to be printed
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.fatal('critical', 'something went awry, i =', i)
@@ -340,9 +362,9 @@ end
 -------------------------------------------------------------------------------
 -- Prints variable v contents to stdio with optional prompt
 -- included for backward compatibility - replaced by print
--- @param prompt is an optional prompt
--- @param v is a variable whose contents are to be printed
--- @param level is the debug level for the message INFO by default
+-- @string prompt Optional prompt
+-- @param v is a variable whose contents are to be printed. This param accepts multiple types.
+-- @tparam[opt] dbgLevels level Debug level for the message INFO by default
 -- @usage
 -- local dbg = require 'rinLibrary.rinDebug'
 -- dbg.printVar('the value of x is', x, 'debug')

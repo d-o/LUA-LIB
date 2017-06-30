@@ -6,7 +6,13 @@
 -------------------------------------------------------------------------------
 
 local _M = {}
+
 local floor = math.floor
+local type = type
+local unpack = unpack
+local tonumber = tonumber
+local dbg = dbg
+local string = string
 
 local namings = require 'rinLibrary.namings'
 
@@ -81,7 +87,7 @@ local reformationDates = {
 }
 
 local gregorianChange, gregorianFirstDay
-local date_first, date_second, date_third = 'day', 'month', 'year'
+local date_first, date_second, date_third, date_yearlen = 'day', 'month', 'year', 4
 
 -------------------------------------------------------------------------------
 -- Test if a date is from the Gregorian or Julian calendar.
@@ -165,9 +171,9 @@ end
 -- Julian calendar can be force for all time by specifying <i>Julian</i>.
 --
 -- The default is the British change over date in 1752.
--- @param year The year of the final day of the Julian calendar or the name of the country
--- @param month The month of the final day of the Julian calendar or nil if specified by country
--- @param day The last day of the Julian calendar or nil if specified by country
+-- @int year The year of the final day of the Julian calendar or the name of the country
+-- @int month The month of the final day of the Julian calendar or nil if specified by country
+-- @int day The last day of the Julian calendar or nil if specified by country
 -- @usage
 -- -- local date = require'rinLibrary.date'
 --
@@ -184,23 +190,23 @@ _M.setReformation('british')
 
 -------------------------------------------------------------------------------
 -- Check is a date is valid and in canonical form
--- @param year Year of interest
--- @param month Month in year
--- @param day Day in month
--- @return True iff the date is legal
+-- @int year Year of interest
+-- @int month Month in year
+-- @int day Day in month
+-- @treturn bool True if the date is legal
 -- @local
---local function checkDate(year, month, day)
---	if year < -4799 or year > 9999 then
---		return false
---    end
---    local y, m, d = jdnToYmd(ymdToJdn(year, month, day))
---    return y == year and m == month and d == day
---end
+local function checkDate(year, month, day)
+	if year < -4799 or year > 9999 then
+		return false
+    end
+    local y, m, d = jdnToYmd(ymdToJdn(year, month, day))
+    return y == year and m == month and d == day
+end
 
 -------------------------------------------------------------------------------
 -- Test if a year is a leap year or not
--- @param year Year of interest
--- @return True iff the year is a leap year
+-- @int year Year of interest
+-- @treturn bool True if the year is a leap year
 -- @usage
 -- local date = require'rinLibrary.date'
 --
@@ -219,13 +225,13 @@ end
 
 -------------------------------------------------------------------------------
 -- Return the number of days between two dates
--- @param y1 Start year
--- @param m1 Month in starting year
--- @param d1 Day in starting month
--- @param y2 Finish year
--- @param m2 Month in finishing year
--- @param d2 Day in finishing month
--- @return the Number of days between the two dates
+-- @int y1 Start year
+-- @int m1 Month in starting year
+-- @int d1 Day in starting month
+-- @int y2 Finish year
+-- @int m2 Month in finishing year
+-- @int d2 Day in finishing month
+-- @treturn int the Number of days between the two dates
 -- @usage
 -- local date = require'rinLibrary.date'
 --
@@ -237,13 +243,13 @@ end
 
 -------------------------------------------------------------------------------
 -- Add a number of days to a given date
--- @param year Year of interest
--- @param month Month in year
--- @param day Day in month
--- @param n The number of days to add, can be negative
--- @return Year of final date
--- @return Month of that year
--- @return Day of that month
+-- @int year Year of interest
+-- @int month Month in year
+-- @int day Day in month
+-- @int n The number of days to add, can be negative
+-- @treturn int Year of final date
+-- @treturn int Month of that year
+-- @treturn int Day of that month
 -- @usage
 -- local date = require'rinLibrary.date'
 --
@@ -255,12 +261,12 @@ end
 
 -------------------------------------------------------------------------------
 -- Function to return the day of the week for a given date
--- @param year Year of interest
--- @param month Month in year
--- @param day Day in month
--- @return 1 .. 7, 1 is Monday
--- @return Day name
--- @return Short day name
+-- @int year Year of interest
+-- @int month Month in year
+-- @int day Day in month
+-- @treturn int 1 .. 7, 1 is Monday
+-- @treturn string Day name
+-- @treturn string Short day name
 -- @usage
 -- local date = require'rinLibrary.date'
 --
@@ -274,9 +280,9 @@ end
 
 -------------------------------------------------------------------------------
 -- Function to return the length of a month in a given year
--- @param year Year of interest
--- @param month Month in year
--- @return Number of days in the month that year
+-- @int year Year of interest
+-- @int month Month in year
+-- @treturn int Number of days in the month that year
 function _M.monthLength(year, month)
     if month == 12 then
         return _M.deltaDays(year, month, 1, year+1, 1, 1)
@@ -286,9 +292,9 @@ end
 
 -------------------------------------------------------------------------------
 -- Return the name of the specified month
--- @param month Month in year
--- @return Month name
--- @return Short month name
+-- @int month Month in year
+-- @treturn string month Month name
+-- @treturn string Short month name
 -- local date = require'rinLibrary.date'
 --
 -- local month, _ = date.monthName(3)
@@ -299,9 +305,10 @@ end
 
 -------------------------------------------------------------------------------
 -- Sets the order of the date string
--- @param first  = 'day', 'month' or 'year'
--- @param second  = 'day', 'month' or 'year'
--- @param third = 'day','month' or 'year'
+-- @string first  'day', 'month' or 'year'
+-- @string second 'day', 'month' or 'year'
+-- @string third 'day','month' or 'year'
+-- @int yearLen Exact number of digits in year (default 4)
 -- @see getDateFormat
 -- @usage
 -- -- Set the current date format to year then day then month
@@ -310,10 +317,11 @@ end
 -- local date = require'rinLibrary.date'
 --
 -- date.setDateFormat('year', 'day', 'month')
-function _M.setDateFormat(first, second, third)
+function _M.setDateFormat(first, second, third, yearLen)
     local first = first or 'day'
     local second = second or 'month'
     local third = third or 'year'
+    local yearLen = yearLen or 4
 
     local check = { day = 0, month = 0, year = 0 }
     check[first] = check[first] + 1
@@ -324,6 +332,7 @@ function _M.setDateFormat(first, second, third)
         date_first = first
         date_second = second
         date_third = third
+        date_yearlen = yearLen
     else
         dbg.warn('date: illegal date format specified:', first, second, third)
     end
@@ -331,9 +340,10 @@ end
 
 -------------------------------------------------------------------------------
 -- Gets the order of the date string
--- @return first field
--- @return second field
--- @return third field
+-- @treturn string First field
+-- @treturn string Second field
+-- @treturn string Third field
+-- @treturn int Year length (exact number of digits in year)
 -- @see setDateFormat
 -- @usage
 -- local date = require'rinLibrary.date'
@@ -343,15 +353,15 @@ end
 --     print('Someone is being silly with the date formatting')
 -- end
 function _M.getDateFormat()
-    return date_first, date_second, date_third
+    return date_first, date_second, date_third, date_yearlen
 end
 
 -------------------------------------------------------------------------------
 -- Returns formated date string
--- @param year Year of interest
--- @param month Month in year
--- @param day Day in month
--- @return Formatted date string
+-- @int year Year of interest
+-- @int month Month in year
+-- @int day Day in month
+-- @treturn string Formatted date string
 -- @see getDateFormat
 -- @see setDateFormat
 -- @usage
@@ -359,8 +369,13 @@ end
 --
 -- print(date.formatDate(2000, 12, 17))
 function _M.formatDate(year, month, day)
-    local t = { year = year, month = month, day = day }
-    return string.format("%02d/%02d/%02d", t[date_first], t[date_second], t[date_third])
+    local tempDay = string.format("%02d", day)
+    local tempMonth = string.format("%02d", month)
+    local tempYearStr = "%" .. string.format("0%dd", date_yearlen)
+    local tempYear = string.format(tempYearStr, year % (10^date_yearlen))
+
+    local t = { year = tempYear, month = tempMonth, day = tempDay }
+    return string.format("%s/%s/%s", t[date_first], t[date_second], t[date_third])
 end
 
 return _M

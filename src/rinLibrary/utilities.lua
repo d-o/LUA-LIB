@@ -16,6 +16,16 @@ local regPattern = P'REG_' * C(R('AZ', '09', '__')^1)
 
 local lower = string.lower
 local min, max = math.min, math.max
+local error = error
+local tostring = tostring
+local pairs = pairs
+local type = type
+local assert = assert
+local rawset = rawset
+local string = string
+local ipairs = ipairs
+local unpack = unpack
+local table = table
 
 return function(mod, private, deprecated)
     local regMap, regUnmap = { [0] = 0 }, { [0] = 0 }
@@ -174,7 +184,7 @@ return function(mod, private, deprecated)
             value = value + inc % size
             if value > size then value = value - size end
         else
-            value = math.min(size, math.max(1, value + inc))
+            value = min(size, max(1, value + inc))
         end
         return value
     end
@@ -207,7 +217,9 @@ return function(mod, private, deprecated)
     for _, d in pairs{
         'k401', 'k402',
         'k410',
-        'k422', 'k491'
+        'k422', 'k491',
+
+        'a418',
     } do
         private[d] = function(v)
 			assert(private.deviceType ~= nil)
@@ -245,6 +257,7 @@ return function(mod, private, deprecated)
 		assert(private.deviceType ~= nil)
         private.batching = private.valueByDevice{
             k410 = willy,
+            a418 = willy,
             default = nilly
         }
         return private.batching(v)
@@ -259,9 +272,10 @@ return function(mod, private, deprecated)
 -- @see valueByDevice
 -- @local
     function private.nonbatching(v)
-		assert(private.deviceType ~= nil)
+	assert(private.deviceType ~= nil)
         private.nonbatching = private.valueByDevice{
             k410 = nilly,
+            a418 = nilly,
             default = willy
         }
         return private.nonbatching(v)

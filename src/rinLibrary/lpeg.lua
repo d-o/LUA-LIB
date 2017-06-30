@@ -8,6 +8,9 @@
 local lpeg = require 'lpeg'
 local P, S = lpeg.P, lpeg.S
 
+local type = type
+local error = error
+
 -- Load the locale definitons into the lpeg table itself
 lpeg.locale(lpeg)
 
@@ -22,8 +25,8 @@ lpeg.float = pm * (digits * (P'.'*lpeg.digit^0)^-1 + P'.'*digits) * (S'eE'*pm*di
 
 -------------------------------------------------------------------------------
 -- Define a lpeg pattern to match a string case insensitively
--- @param str String to match
--- @return pattern
+-- @string str String to match
+-- @treturn LpegPattern pattern
 -- @usage
 -- local lpeg = require 'rinLibrary.lpeg'
 -- local pattern = lpeg.Pi 'hello'
@@ -31,7 +34,12 @@ function lpeg.Pi(str)
     if type(str) == 'string' then
         local patt = P(true)
         for c in str:gmatch(".") do
-            patt = patt * (P(c:lower()) + P(c:upper()))
+            local l, u = c:lower(), c:upper()
+            if l == u then
+                patt = patt * P(c)
+            else
+                patt = patt * S(l..u)
+            end
         end
         return patt
     end

@@ -2,7 +2,7 @@
 --- USB Helper Infrastructure.
 -- Support routines to provide a semi-standard interface to USB file copying
 -- and package installation.
--- @module rinLibrary.K400USB
+-- @module rinLibrary.Device.USB
 -- @author Pauli
 -- @copyright 2014 Rinstrum Pty Ltd
 -------------------------------------------------------------------------------
@@ -12,6 +12,9 @@ local timers = require 'rinSystem.rinTimers'
 local utils = require 'rinSystem.utilities'
 local naming = require 'rinLibrary.namings'
 local posix = require 'posix'
+
+local pairs = pairs
+local os = os
 
 local whenMap = {
     idle = 'idle',
@@ -178,9 +181,8 @@ return function (_M, private, deprecated)
 --
 -- You generally don't need to call this directly, the when setting can be
 -- specified when activing the storage helper subsystem.
--- @param w When ('idle', 'immediate', 'manual')
+-- @tparam usbWhenMode w When ('idle', 'immediate', 'manual')
 -- @see usbActivateStorage
--- @see usbWhenMode
 -- @usage
 -- device.usbSetWhen('immediate')
     function _M.usbSetWhen(w)
@@ -312,9 +314,8 @@ return function (_M, private, deprecated)
 
 -------------------------------------------------------------------------------
 -- Activate the USB storage subsystem.
--- @param args Parameters for the subsystem
+-- @tparam usbActivateParameters args Parameters for the subsystem
 -- @see usbDeactiveStorage
--- @see usbActivateParameters
     function _M.usbActivateStorage(args)
         newUsbCB = args.new             utils.checkCallback(newUsbCB)
         removedUsbCB = args.removed     utils.checkCallback(removedUsbCB)
@@ -340,7 +341,7 @@ return function (_M, private, deprecated)
 
 -------------------------------------------------------------------------------
 -- Indictor function to tell if the auto USB subsystem is active or not
--- @return Boolean, true if a menu is active
+-- @treturn bool True if a menu is active
 -- @usage
 -- if not device.usbStorageInProgress() then
 --     device.display('topLeft', 'HELLO')

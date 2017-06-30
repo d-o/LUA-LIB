@@ -11,30 +11,32 @@ local loader = require('rinLibrary.deviceLoader')
 local modules = {
     "rinCon",
     "K400Reg",
-    "K400Util",
-    "K400Stream",
-    "K400Status",
+    "GenericReg",
+    "GenericUtil",
+    "GenericStream",
+    "GenericStatus",
     "K400Axle",
-    "K400Batch",
-    "K400Keys",
-    "K400Buzz",
+    "GenericKeys",
+    "GenericBuzz",
+    "GenericLCD",
     "K400LCD",
     "K400Dialog",
-    "K400FSM",
+    "GenericFSM",
     "K400Menu",
-    "K400RTC",
-    "K400Analog",
+    "GenericRTC",
+    "GenericAnalog",
+    "K400Batch",
     "K400Setpoint",
     "K400Print",
-    "K400Command",
+    "GenericCommand",
     "K400Users",
-    "K400Passcode",
+    "GenericPasscode",
     "K400USB",
-    "K400Weights"
+    "GenericWeights"
 }
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 -- Module factory function begins here
 return function (model)
-    return loader(model, modules)
+    return loader(model, "k400", modules)
 end

@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- Services for saving and restoring settings in a table to .INI config file
+--- Services for saving and restoring settings in a table to .INI config file
 -- @module rinLibrary.rinINI
 -- @author Darren Pearson
 -- @copyright 2013 Rinstrum Pty Ltd
@@ -18,9 +18,9 @@ local utils = require 'rinSystem.utilities'
 
 -------------------------------------------------------------------------------
 -- Saves table t as a .INI name (fname)
--- @param fname  name of file
--- @param t is table of settings
--- @return t if successful, nil otherwise
+-- @string fname Name of file
+-- @tab t is table of settings
+-- @treturn tab Input table t if successful, nil otherwise
 -- @usage
 -- local config = {
 --         general = { name = 'Fred'},  -- [general] group settings
@@ -64,9 +64,9 @@ end
 -------------------------------------------------------------------------------
 -- populates table t with contents of INI file fname
 -- if fname is not found a new file is created with table def contents
--- @param fname name of file
--- @param def  default table of settings
--- @return table t or nil if file invalid
+-- @string fname Name of file
+-- @tab def Default table of settings
+-- @treturn tab Table t or nil if file invalid
 -- @usage
 -- local t = ini.loadINI('config.ini',config)  -- load INI file from disk using config table
 function _M.loadINI(fname, def)
@@ -84,6 +84,11 @@ function _M.loadINI(fname, def)
 
     lt = t    -- support settings with no section header directly
     for s in f:lines() do
+        -- Handle \r\n terminated ini files.
+        if string.sub(s, -1) == '\r' then
+            s = string.sub(s, 1, -2)  
+        end
+    
         local first = string.find(s,'%[')
         local last = string.find(s,'%]')
         if first ~= nil and last ~= nil then
@@ -121,8 +126,8 @@ end
 
 -------------------------------------------------------------------------------
 -- returns table t contents in an INI format string
--- @param t is table of settings
--- @return A string in INI format
+-- @tab t T is table of settings
+-- @treturn string A string in INI format
 -- @usage
 -- local t = ini.loadINI('config.ini',config)
 -- print(ini.stringINI(t))

@@ -14,6 +14,10 @@ local require = require
 local dofile = dofile
 local bit32 = require "bit"
 local io = io
+local table = table
+local os = os
+local ipairs = ipairs
+local unpack = unpack
 
 local lpeg = require "rinLibrary.lpeg"
 local P, Pi, V = lpeg.P, lpeg.Pi, lpeg.V
@@ -27,10 +31,9 @@ local usb = require "rinLibrary.rinUSB"
 local dbg = require "rinLibrary.rinDebug"
 local canonical = require('rinLibrary.namings').canonicalisation
 
-local deprecatedFields, warned = {
-    system = system,
-    dbg = dbg
-}, {}
+local deprecatedFields, warned = {}, {}
+
+local userIOStarted = false
 
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 -- Submodule function begins here
@@ -50,13 +53,11 @@ _M.config = {
 }
 
 -- Create the rinApp resources
-_M.userio = require "IOSocket.Pack"
+_M.userio = require "rinSystem.IOSockets"
 
 _M.devices = {}
 _M.config = ini.loadINI('rinApp.ini',_M.config)
 dbg.configureDebug(_M.config)
-
-usb.deprecatedUSBhandlers(_M)
 
 local userTerminalCallback = nil
 local bidirectionalSocket = nil
@@ -67,7 +68,7 @@ local userEvents = {}
 
 -------------------------------------------------------------------------------
 -- Check if the application is still running
--- @return boolean, true if running
+-- @treturn bool True if running, false otherwise
 -- @usage
 -- if not rinApp.isRunning() then
 --     ...
@@ -78,7 +79,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Tell the application to stop running
--- @return true
+-- @treturn bool Always returns true
 -- @usage
 -- device.setKeyCallback('pwr_cancel', rinApp.finish, 'long')
 function _M.finish()
@@ -91,7 +92,7 @@ end
 -- Nothing is called unless the user hits <Enter>.  The callback function is
 -- called with the data entered by the user.  Have the callback return true
 -- to indicate that the message has been processed, false otherwise.
--- @param f callback given data entered by user in the terminal screen
+-- @func f callback given data entered by user in the terminal screen
 -- @usage
 -- rinApp.setUserTerminal(function(data) print('received', data) end)
 function _M.setUserTerminal(f)
@@ -130,11 +131,11 @@ end
 -------------------------------------------------------------------------------
 -- Called to connect to the K400 instrument, and establish the timers,
 -- streams and other services
--- @param model Software model expected for the instrument (eg "K401")
--- @param ip IP address for the socket, "127.0.0.1" used as a default
--- @param portA port address for the SERA socket (2222 used as default)
--- @param portB port address for the SERB socket (2223 used as default)
--- @return device object for this instrument
+-- @string[opt] model Software model expected for the instrument (eg "K401")
+-- @string[opt] ip IP address for the socket, "127.0.0.1" used as a default
+-- @int[opt] portA port address for the SERA socket (2222 used as default)
+-- @int[opt] portB port address for the SERB socket (2223 used as default)
+-- @return rinLibrary.Device object for this instrument
 -- @usage
 -- local rinApp = require "rinApp"
 --
@@ -149,7 +150,7 @@ function _M.addK400(model, ip, portA, portB)
     device.portA = portA or 2222
     device.portB = portB or 2223
 
-  	local sA = socks.createTCPsocket(device.ipaddress, device.portA, 0.001)
+    local sA = socks.createTCPsocket(device.ipaddress, device.portA, 0.001)
     local sB = socks.createTCPsocket(device.ipaddress, device.portB, 0.001)
 
     -- Connect to the K400, and attach system if using the system library
@@ -159,9 +160,9 @@ function _M.addK400(model, ip, portA, portB)
     socks.addSocket(device.socketA, device.socketACallback)
     socks.addSocket(device.socketB, device.socketBCallback)
 
-	-- Create the extra debug port
+    -- Create the extra debug port
     socks.createServerSocket(2226, device.socketDebugAcceptCallback)
-	dbg.setDebugCallback(function (m) socks.writeSet("debug", m .. "\r\n") end)
+    dbg.setDebugCallback(function (m) socks.writeSet("debug", m .. "\r\n") end)
 
     device.initialisation(model)
 
@@ -174,23 +175,103 @@ function _M.addK400(model, ip, portA, portB)
     device.setupStatus()
     device.lcdControl('lua')
     device.configure()
+    
+    -- Set up the topLeft and bottomLeft. Ensures that when displays are saved
+    -- these are correctly restored without being explicitly written by the user.
+    device.saveAutoLeft()
+    local old = device.readAuto('topLeft')
+    device.writeAuto('topLeft', old)
+    old = device.readAuto('bottomLeft')
+    device.writeAuto('bottomLeft', old)
+    
+    -- Only initialise the user IO when a device connects
+    if (userIOStarted == false) then
+      socks.addSocket(_M.userio.connectDevice(), userioCallback)
+      dbg.info('','------   User Terminal Started  ------')
+      userIOStarted = true
+    end
+        
     return device
 end
 
 -------------------------------------------------------------------------------
+-- Called to connect to the C500 instrument, and establish the timers,
+-- streams and other services
+-- @string[opt] model Software model expected for the instrument (eg "C500")
+-- @string[opt] ip IP address for the socket, "127.0.0.1" used as a default
+-- @int[opt] portA port address for the SERA socket (2222 used as default)
+-- @int[opt] portB port address for the SERB socket (2223 used as default)
+-- @return rinLibrary.Device object for this instrument
+-- @usage
+-- local rinApp = require "rinApp"
+--
+-- local device = rinApp.addC500()
+-- local otherDevice = rinApp.addC500('C500', '1.1.1.1')
+function _M.addC500(model, ip, portA, portB)
+    -- Create the socket
+    local device = require("rinLibrary.C500")(model)
+    table.insert(_M.devices, device)
+
+    device.ipaddress = ip or os.getenv('C500IP') or "127.0.0.1"
+
+    device.portA = portA or 2222
+    device.portB = portB or 2223
+
+    local sA = socks.createTCPsocket(device.ipaddress, device.portA, 0)
+    local sB = socks.createTCPsocket(device.ipaddress, device.portB, 0.001)
+
+    -- Connect to the C500, and attach system if using the system library
+    device.connect(sA, sB, _M)
+
+    -- Register the C500 with system
+    socks.addSocket(device.socketA, device.socketACallback)
+    --socks.addSocket(device.socketB, device.socketBCallback)
+
+    -- Create the extra debug port
+    socks.createServerSocket(2226, device.socketDebugAcceptCallback)
+    dbg.setDebugCallback(function (m) socks.writeSet("debug", m .. "\r\n") end)
+    device.initialisation(model)
+
+    -- Flush the key presses
+    device.flushKeys()
+    device.streamCleanup()  -- Clean up any existing streams on connect
+    device.setupKeys()
+    device.addDisplay("C500", "", 'embedded')
+    device.addDisplay("console", "", 'embedded')
+    device.setupStatus()
+    device.lcdControl('lua')
+    device.configure()
+    
+    -- Set up the topLeft and bottomLeft. Ensures that when displays are saved
+    -- these are correctly restored without being explicitly written by the user.
+    --local old = device.readAuto('C500')
+    --device.writeAuto('C500', old)
+    
+    -- Only initialise the user IO when a device connects
+    if (userIOStarted == false) then
+      socks.addSocket(_M.userio.connectDevice(), userioCallback)
+      dbg.info('','------   User Terminal Started  ------')
+      userIOStarted = true
+    end
+    
+    return device
+end
+
+
+-------------------------------------------------------------------------------
 -- Write to the bidirectional socket
--- @param msg The message to write
+-- @string msg The message to write
 -- @usage
 -- rinApp.writeBidirectional('hello world!')
 function _M.writeBidirectional(msg)
-	if bidirectionalSocket ~= nil then
-		socks.writeSocket(bidirectionalSocket, msg)
+  if bidirectionalSocket ~= nil then
+    socks.writeSocket(bidirectionalSocket, msg)
     end
 end
 
 -------------------------------------------------------------------------------
 -- Set a call back that receives all incoming bidirectional communication.
--- @param f Call back function, takes one argument which contains the current message.
+-- @func f Call back function, takes one argument which contains the current message.
 -- @usage
 -- rinApp.setUserBidirectionalCallback(function(m) print('message received', m) end)
 function _M.setUserBidirectionalCallback(f)
@@ -202,12 +283,12 @@ end
 -- @param sock Socket that has something ready to read.
 -- @local
 local function bidirectionalFromExternal(sock)
-	m, err = socks.readSocket(sock)
+    local m, err = socks.readSocket(sock)
     if err ~= nil then
-    	socks.removeSocket(sock)
+      socks.removeSocket(sock)
         bidirectionalSocket = nil
     else
-    	if _M.userBidirectionalCallback then
+      if _M.userBidirectionalCallback then
             _M.userBidirectionalCallback(m)
         end
     end
@@ -215,7 +296,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Set a call back that handles incoming bidirectional socket connections.
--- @param f Call back function.
+-- @func f Call back function.
 -- @usage
 -- function cb(sock, ip, port)
 --     print('connection from', ip, port)
@@ -235,11 +316,11 @@ end
 -- @param port Source port number
 -- @local
 local function socketBidirectionalAccept(sock, ip, port)
-	if bidirectionalSocket ~= nil then
+  if bidirectionalSocket ~= nil then
         dbg.info('second bidirectional connection from', ip, port)
     else
-	    bidirectionalSocket = sock
-	    socks.addSocket(sock, bidirectionalFromExternal)
+      bidirectionalSocket = sock
+      socks.addSocket(sock, bidirectionalFromExternal)
         socks.setSocketTimeout(sock, 0.001)
         dbg.debug('bidirectional connection from', ip, port)
         if _M.userBidirectionalConnectCallback then
@@ -267,25 +348,25 @@ end
 -- @param port The source port of the socket
 -- @local
 local function socketUnidirectionalAccept(sock, ip, port)
-	-- Set up so that all incoming traffic is ignored, this stream only
+  -- Set up so that all incoming traffic is ignored, this stream only
     -- does outgoings.  Failure to do this will cause a build up of incoming
     -- data packets and blockage.
-	socks.addSocket(sock, socks.flushReadSocket)
-	-- Set a brief timeout to prevent things clogging up.
+  socks.addSocket(sock, socks.flushReadSocket)
+  -- Set a brief timeout to prevent things clogging up.
     socks.setSocketTimeout(sock, 0.001)
-	-- Add the socket to the unidirectional broadcast group.  A message
+  -- Add the socket to the unidirectional broadcast group.  A message
     -- sent here is forwarded to all unidirectional sockets.
     -- We're using an inline filter function that just allows all traffic
     -- through, this function can return nil to prevent a message or something
     -- else to replace a message.
     socks.addSocketSet("uni", sock, unidirectionFilter)
-	-- Finally, log the fact that we've got a new connection
+  -- Finally, log the fact that we've got a new connection
     dbg.info('unidirectional connection from', ip, port)
 end
 
 -------------------------------------------------------------------------------
 -- Called to register application's main loop function
--- @param f Mail Loop function to call
+-- @func f Mail Loop function to call
 -- @usage
 -- local function mainLoop()
 --     ...
@@ -298,7 +379,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Called to register application's cleanup function
--- @param f cleanup function to call
+-- @func f cleanup function to call
 -- @usage
 -- local function cleanUp()
 --     ...
@@ -322,6 +403,9 @@ function _M.init()
     usb.initUSB()
     for i,v in ipairs(_M.devices) do
         v.init()
+    end
+    for k,v in pairs(_M.devices) do
+      v.handleUSBNotify(nil, true)
     end
     _M.initialised = true
 end
@@ -356,14 +440,14 @@ end
 
 -------------------------------------------------------------------------------
 -- Add an event that will be processed only when all dialogs, editing and
--- main loop processing is finished.  The optional name prevents multiple
+-- main loop processing is finished. The name prevents multiple
 -- events from being scheduled simultaneously.  Only the first scheduled event
 -- of a specific name is execute each time around the main loop.
--- @param name Name of this event, optional
--- @param callback Function to run when timer is complete
--- @param ... Function arguments
+-- @string name Name of this event, optional
+-- @func callback Function to run when timer is complete
+-- @param[opt] ... Function arguments
 -- @usage
--- rinApp.addIdleEvent(print, 'things have calmed down')
+-- rinApp.addIdleEvent('printer', print, 'things have calmed down')
 function _M.addIdleEvent(name, callback, ...)
     local args
     if utils.callable(name) then
@@ -395,7 +479,7 @@ local function step()
 
         -- New events means we've got to force the event loop to exit quickly
         if #userEvents ~= 0 then
-            timers.addEvent(function() end)
+            timers.addEvent(utils.null)
         end
     end
     system.handleEvents()           -- handleEvents runs the event handlers
@@ -406,7 +490,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Delay until the specified condition occurs
--- @param cond Condition function
+-- @func cond Condition function, should return either true or false
 -- @usage
 -- rinApp.delayUntil(function() return finished end)
 function _M.delayUntil(cond)
@@ -421,7 +505,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Called to delay for t sec while keeping event handlers running
--- @param t delay time in sec
+-- @number t Delay time in sec
 -- @usage
 -- rinApp.delay(0.1)    -- pause for 100 ms
 function _M.delay(t)
@@ -446,7 +530,6 @@ end
 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
 -- Create the server and io sockets
 io.output():setvbuf('no')
-socks.addSocket(_M.userio.connectDevice(), userioCallback)
 socks.createServerSocket(2224, socketBidirectionalAccept)
 socks.createServerSocket(2225, socketUnidirectionalAccept)
 running = true
